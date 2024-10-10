@@ -4,10 +4,16 @@
 
 state("swkotor") 
 {
-	string10 area: "swkotor.exe", 0x003A39E8, 0x4C, 0x0;
-	uint tickcount: "swkotor.exe", 0x003B935C, 0x54, 0x64, 0x18C;
+	string10 area: "swkotor.exe", 0x3A39E8, 0x4C, 0x0;
+	uint tickcount: "swkotor.exe", 0x3B935C, 0x54, 0x64, 0x18C;
 	uint endState: "swkotor.exe",  0x3BB4E4;
-	int loadBar: "swkotor.exe", 0x003A39FC, 0x4, 0x4, 0x278, 0xC4;
+
+	int loadBar: "swkotor.exe", 0x3A39FC, 0x4, 0x4, 0x278, 0xC4;
+    uint messageBoxPTR: "swkotor.exe", 0x3A39FC, 0x4, 0x4, 0x40, 0x98;
+    uint messageBoxCallbackPTR: "swkotor.exe", 0x3A39FC, 0x4, 0x4, 0x40, 0x98, 0x68;
+	uint modalStackFirstPTR: "swkotor.exe", 0x3A39FC, 0x4, 0x4, 0x40, 0x38, 0x94, 0x0;
+	uint modalStackSecondPTR: "swkotor.exe", 0x3A39FC, 0x4, 0x4, 0x40, 0x38, 0x94, 0x4;
+    uint modalCount: "swkotor.exe", 0x3A39FC, 0x4, 0x4, 0x40, 0x38, 0x98;
 }
 
 startup
@@ -294,8 +300,33 @@ init
     int moduleSize = modules.First().ModuleMemorySize;
     print("module size is " + moduleSize);
 
+    vars.isMessageBoxOpen = false;
+    vars.isMessageBoxAMG = false;
+	vars.isMBOnModalStack = false;
+	vars.trustLoad = true;
+
     timer.IsGameTimePaused = false;
     game.Exited += (s, e) => timer.IsGameTimePaused = false;
+}
+
+update {
+    vars.isMessageBoxOpen = (current.modalCount > 0);
+
+    vars.isMessageBoxAMG = (current.messageBoxCallbackPTR == 0x5F1BD0);
+
+    vars.isMBOnModalStack = (
+        current.modalStackFirstPTR == current.messageBoxPTR
+    ) || (current.modalCount > 1 && current.modalStackSecondPTR == current.messageBoxPTR);
+
+    if (current.loadBar == 0) {
+        vars.trustLoad = true;
+    } else if (
+        vars.isMessageBoxOpen &&
+        vars.isMessageBoxAMG &&
+        vars.isMBOnModalStack
+    ) {
+        vars.trustLoad = false;
+    }
 }
 
 start
@@ -334,7 +365,8 @@ split
 
 isLoading
 {
-    return current.loadBar > 0;
+    return (current.loadBar > 0) && vars.trustLoad;
+	
 }
 
 shutdown {
